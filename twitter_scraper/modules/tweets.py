@@ -3,12 +3,17 @@ from requests_html import HTMLSession, HTML
 from datetime import datetime
 from urllib.parse import quote
 from lxml.etree import ParserError
+import time
 
 session = HTMLSession()
 
-def get_tweets(query, pages=25):
+_timeout = None
+
+def get_tweets(query, pages=25, sleep=0, timeout=5):
+    global _session, _timeout
     """Gets tweets for a given user, via the Twitter frontend API."""
 
+    _timeout = timeout
     after_part = (
         f"include_available_features=1&include_entities=1&include_new_items_bar=true"
     )
@@ -29,7 +34,7 @@ def get_tweets(query, pages=25):
     }
 
     def gen_tweets(pages):
-        r = session.get(url, headers=headers)
+        r = session.get(url, headers=headers, timeout=timeout)
 
         while pages > 0:
             try:
@@ -62,7 +67,7 @@ def get_tweets(query, pages=25):
 
                 username = profile.attrs["data-screen-name"]
 
-                time = datetime.fromtimestamp(
+                tweet_time = datetime.fromtimestamp(
                     int(tweet.find("._timestamp")[0].attrs["data-time-ms"]) / 1000.0
                 )
 
@@ -134,7 +139,7 @@ def get_tweets(query, pages=25):
                         "tweetUrl": tweet_url,
                         "username": username,
                         "isRetweet": is_retweet,
-                        "time": time,
+                        "time": tweet_time,
                         "text": text,
                         "replies": replies,
                         "retweets": retweets,
@@ -156,8 +161,9 @@ def get_tweets(query, pages=25):
                     r"(\S)pic\.twitter", "\g<1> pic.twitter", tweet["text"], 1
                 )
                 yield tweet
-
-            r = session.get(url, params={"max_position": last_tweet}, headers=headers)
+            if sleep:
+                time.sleep(sleep)
+            r = session.get(url, params={"max_position": last_tweet}, headers=headers, timeout=timeout)
             pages += -1
 
     yield from gen_tweets(pages)
